@@ -1,0 +1,265 @@
+#--- Know which directory your R-work-sheet is addressing to ---
+ getwd()  
+# -- let me change the directory to "2021 Summer/ISyE4031" directory, where I had downloaded the data from Canvas to my PC 
+ setwd("C:/Users/Andy/Downloads/ISYE4031")
+ getwd() # just to make sure that I did the directory-change correctly
+
+#------ Load Data -----------
+ sou = scan("http://robjhyndman.com/tsdldata/data/fancy.dat")   #Read 84 items
+ sout = ts(sou, frequency=12, start=c(1987,1))  #assign a name for the data
+ sout   #print data on the screen
+ plot.ts(sout) #plot data
+
+#--- Log-Transform Data ---------
+ logsou = log(sout)  #log-transform the data
+ plot.ts(logsou)   #plot the transformed data
+
+#--- prepare Modeling/Training and Testing Data --------
+ MD = logsou[1:72]    #use the first 72 data points for model training
+ MD = ts(MD, frequency=12, start=c(1987,1))  
+ TD = logsou[73:84]   #use the last 12 data points for Model Testing/Forecasting
+
+#------ Load Library Forecast ---------
+ library(stats)   #load predict.HoltWinters program
+
+#-------- Fit EWMA Model (can be extended for other EWMA models) --------
+ MDs = HoltWinters(MD, beta=FALSE, gamma=FALSE)   #Single EWMA
+ MDd = HoltWinters(MD,  gamma=FALSE)   #Double EWMA
+ MDt = HoltWinters(MD)  #Triple EWMA (parameters beta and gamma are TRUE by default)
+
+#---------  Make Printouts ----------
+ MDs  #print out Single EWMA fitting results (on the screen)
+ MDd  #print out Double EWMA fitting results (on the screen)
+ MDt  #print out Triple EWMA fitting results (on the screen)
+
+#--------- Get the Fitted Values ------
+ MDsfit = MDs$fitted   #for the single EWMA model 
+
+ MDdfit = MDd$fitted   #for the double EWMA model 
+
+ MDtfit = MDt$fitted   #for the Triple EWMA model 
+
+
+#------ Calculate the SSE with the 72-data from model-fits from the R-EWMA Package -----------
+ MDsSSE = MDs$SSE  #SSE from the Single-EWMA fit 
+ MDdSSE = MDd$SSE  #SSE from the Double-EWMA fit 
+ MDtSSE = MDt$SSE  #SSE from the Triple-EWMA fit 
+ MDSSE = c(MDsSSE, MDdSSE, MDtSSE)  #These SSE are the same as MSE*nsize calculated below.
+ MDSSE #printout the results on the screen
+
+#---  Preparation (calculate prediction errors) ----------
+
+ DFMDsfit = MD[2:72] - MDsfit[1:71]
+ DFMDdfit = MD[3:72] - MDdfit[1:70]
+ DFMDtfit = MD[13:72] - MDtfit[1:60]
+
+#--- Create a prediction-data-table for report ---
+
+ MDfit_s_r = cbind(MD[2:72],MDsfit[1:71],DFMDsfit)  #single EWMA fit
+ MDfit_s_r #print prdictions and errors on the screen for single EWMA fit
+ MDfit_d_r = cbind(MD[3:72],MDdfit[1:70],DFMDdfit)  #double EWMA fit
+ MDfit_d_r #print prdictions and errors on the screen for double EWMA fit
+ MDfit_t_r = cbind(MD[13:72],MDtfit[1:60],DFMDtfit) #triple EWMA fit
+ MDfit_t_r #print prdictions and errors on the screen for triple EWMA fit
+
+#---- make prediction (fitted-value) plots ---
+attach(mtcars)
+par(mfrow=c(3,1))
+
+#--- The limits below are for data plotting purpose ----
+ymin = round(min(logsou))
+ymax = ceiling(max(logsou))
+
+#------- Plot of Single EMWA Predictions (Fitted-Values) --------
+n_s = 71
+x_s = c(1:n_s)
+
+matplot(x_s,MDfit_s_r[,1:2], type=c("b"),pch=c(1:2),col=c(1:2),
+   ylim=c(ymin,ymax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Single EWMA Predictions")
+   legend("topleft", legend = c("Data", "Prediction"), col=c(1:2),pch=c(1:2))
+
+#------- Plot of Double EMWA Predictions --------
+n_d = 70
+x_d = c(1:n_d)
+
+matplot(x_d,MDfit_d_r[,1:2], type=c("b"),pch=c(1:2),col=c(1:2),
+   ylim=c(ymin,ymax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Double EWMA Predictions")
+   legend("topleft", legend = c("Data", "Prediction"), col=c(1:2),pch=c(1:2))
+
+#------- Plot of Triple EMWA Predictions --------
+n_t = 60
+x_t = c(1:n_t)
+
+matplot(x_t,MDfit_t_r[,1:2], type=c("b"),pch=c(1:2),col=c(1:2),
+   ylim=c(ymin,ymax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Triple EWMA Predictions")
+   legend("topleft", legend = c("Data", "Prediction"), col=c(1:2),pch=c(1:2))
+
+#---------  Perform the four-metrics Calculations in a function ---------
+ Metrics = function(D, DF) {
+#-- 
+ nsize = length(DF)
+ MFE = sum(DF)/nsize  #MFE for nsize data (e.g., 72 or 12 data points)
+ MAD = sum(abs(DF))/nsize 
+ MAPE = 100*sum(abs(DF)/abs(D))/nsize
+ MSE = sum(DF*DF)/nsize
+
+ Metrics = c(MFE, MAD, MAPE, MSE)  #collect all results
+ Metrics  }
+
+#---  Call the Metrics-Function -------
+ MDsMetrics = Metrics(MD[2:72], DFMDsfit[1:71])  #MD data for the Single EWMA Model
+ MDdMetrics = Metrics(MD[3:72], DFMDdfit[1:70])  #MD data for the Double EWMA Model
+ MDtMetrics = Metrics(MD[13:72], DFMDtfit[1:60])  #MD data for the Triple EWMA Model
+
+#--- Organize them together into a Matrics-evaluation-Table ----
+
+ MDMetrics = cbind(MDsMetrics, MDdMetrics, MDtMetrics)
+ MDMetrics   #print out the matrics-evaluation-table for the MD data
+#--- Please remember to make comments about the results ----
+
+
+#----- Forecast from the EWMA Model-fits ----------
+#signle EWMA forecast
+ TDsfore = predict(MDs, 12, prediction.interval=TRUE) 		
+ TDsfore  #print out forecast data
+# 
+#Double EWMA forecast
+ TDdfore = predict(MDd, 12, prediction.interval=TRUE) 
+ TDdfore  #print out forecast data
+# 
+#Triple EWMA forecast
+ TDtfore = predict(MDt, 12, prediction.interval=TRUE) 		
+ TDtfore  #print out forecast data
+# 
+
+#---  Preparation (calculate prediction errors) ----------
+
+ DFTDsfore = TD[1:12] - TDsfore[1:12]
+ DFTDdfore = TD[1:12] - TDdfore[1:12]
+ DFTDtfore = TD[1:12] - TDtfore[1:12]
+
+#--- Create a Forecast-data-table for report ---
+
+ TDfore_s_r = cbind(TD[1:12],TDsfore[1:12],DFTDsfore)  #single EWMA forecast
+ TDfore_d_r = cbind(TD[1:12],TDdfore[1:12],DFTDdfore)  #double EWMA forecast
+ TDfore_t_r = cbind(TD[1:12],TDtfore[1:12],DFTDtfore) #triple EWMA forecast
+ TDfore_all_r = cbind(TDfore_s_r,TDfore_d_r,TDfore_t_r)
+ TDfore_all_r  #print all 9 coulmns of data, forecast and errors from 3 EWMA-forecasts ---
+
+#---- make forecasting plots ---
+attach(mtcars)
+par(mfrow=c(3,1))
+
+#--- The limits below are for data plotting purpose ----
+fmin = round(min(c(TD,TDsfore, TDdfore, TDtfore)))
+fmax = ceiling(max(c(TD,TDsfore, TDdfore, TDtfore)))
+
+#------- Plot of Single EMWA Predictions --------
+n_f = 12
+x_f = c(1:n_f)
+
+TDs = cbind(TD,TDsfore)
+
+matplot(x_f,TDs[,1:4], type=c("b"),pch=c(1:4),col=c(1:4),
+   ylim=c(fmin,fmax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Single EWMA Forecasts")
+   legend("topleft", legend = c("Data", "Forecast", "Upper-Bound", "Lower-Bound"), col=c(1:4),pch=c(1:4))
+
+#------- Plot of Double EMWA Predictions --------
+TDd = cbind(TD,TDdfore)
+
+matplot(x_f,TDd[,1:4], type=c("b"),pch=c(1:4),col=c(1:4),
+   ylim=c(fmin,fmax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Double EWMA Forecasts")
+   legend("topleft", legend = c("Data", "Forecast", "Upper-Bound", "Lower-Bound"), col=c(1:4),pch=c(1:4))
+
+#------- Plot of Triple EMWA Predictions --------
+TDt = cbind(TD,TDtfore)
+
+matplot(x_f,TDt[,1:4], type=c("b"),pch=c(1:4),col=c(1:4),
+   ylim=c(fmin,fmax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Triple EWMA Forecasts")
+   legend("topleft", legend = c("Data", "Forecast", "Upper-Bound", "Lower-Bound"), col=c(1:4),pch=c(1:4))
+
+
+#--- In addition, let us make combined-plots for both Fits and forecasts ---
+yfmin = min(ymin, fmin)
+yfmax = max(ymax, fmax)
+
+attach(mtcars)
+par(mfrow=c(3,1))
+
+#--- Single EWMA ---
+MDsfit = cbind(MDfit_s_r[,1:2],MDfit_s_r[,1:2])  #Fits
+#TDs[,1:4]  #Forecasts
+MTDs=rbind(MDsfit,TDs)
+
+#------- Plot of Single EMWA Predictions --------
+n_yf = 83
+x_yf = c(1:n_yf)
+
+matplot(x_yf,MTDs, type=c("b"),pch=c(1:4),col=c(1:4),
+   ylim=c(yfmin,yfmax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Single EWMA Fits and Forecasts")
+
+#--- Double EWMA ---
+MDdfit = cbind(MDfit_d_r[,1:2],MDfit_d_r[,1:2])  #Fits
+#TDd[,1:4]  #Forecasts
+MTDd=rbind(MDdfit,TDd)
+
+#------- Plot of Double EMWA Predictions --------
+n_yf = 82
+x_yf = c(1:n_yf)
+
+matplot(x_yf,MTDd, type=c("b"),pch=c(1:4),col=c(1:4),
+   ylim=c(yfmin,yfmax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Double EWMA Fits and Forecasts")
+
+#--- Triple EWMA ---
+MDtfit = cbind(MDfit_t_r[,1:2],MDfit_t_r[,1:2])  #Fits
+#TDt[,1:4]  #Forecasts
+MTDt=rbind(MDtfit,TDt)
+
+#------- Plot of Triple EMWA Predictions --------
+n_yf = 72
+x_yf = c(1:n_yf)
+
+matplot(x_yf,MTDt, type=c("b"),pch=c(1:4),col=c(1:4),
+   ylim=c(yfmin,yfmax),xlab="", ylab="")
+   title(xlab="Time Sequence")
+   title(ylab="Sales")
+   title(main="Triple EWMA Fits and Forecasts")
+  
+#--- call the Metrics-Function for evaluation (forecasted data) ----
+
+ TDsMetrics = Metrics(TD[1:12], DFTDsfore[1:12])  #MD data for the Single EWMA Model
+ TDdMetrics = Metrics(TD[1:12], DFTDdfore[1:12])  #MD data for the Double EWMA Model
+ TDtMetrics = Metrics(TD[1:12], DFTDtfore[1:12])  #MD data for the Triple EWMA Model
+
+#--- Organize them together into a Matrix-Table ----
+ TDMetrics = cbind(TDsMetrics, TDdMetrics, TDtMetrics)
+ TDMetrics #print out the matrix-table for the TD data
+
+#---- Save R-worksheet results -----
+
+ save.image(file= "CP2_P1.rda")
+ savehistory(file = "CP2_P1.Rhistory")
